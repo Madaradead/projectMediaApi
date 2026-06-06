@@ -1,0 +1,72 @@
+### Register
+POST http://localhost:5000/auth/register
+Content-Type: application/json
+
+{
+  "email": "vitalik_api@gmail.com",
+  "username": "vitalik_test",
+  "password": "super_secure_password"
+}
+
+
+### Login
+POST http://localhost:5000/auth/login
+Content-Type: application/json
+
+{
+  "email": "vitalik_api@gmail.com",
+  "password": "super_secure_password"
+}
+
+
+### Запрос профиля
+GET http://localhost:5000/auth/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4YzY4YjVjZS0wZDFkLTQ1YzUtYTdlMS0wZDM4ZGQ0YTA5NjEiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODA2NTEwNDYsImV4cCI6MTc4MDczNzQ0Nn0.H6I0MOiiei-GrYscXnySR5_PiuHgjG1BtqME-oOM3Ns
+
+
+### Проверка админки 403
+GET http://localhost:5000/admin/users
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4YzY4YjVjZS0wZDFkLTQ1YzUtYTdlMS0wZDM4ZGQ0YTA5NjEiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODAzOTE2MzIsImV4cCI6MTc4MDQ3ODAzMn0.9aEwnEdy1ck7C3bgmYgbso8XOb3UX4UpQ8lev-9moyk
+
+### Загрузка медиафайла
+POST http://localhost:5000/media/upload
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4YzY4YjVjZS0wZDFkLTQ1YzUtYTdlMS0wZDM4ZGQ0YTA5NjEiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODA2NTEwNDYsImV4cCI6MTc4MDczNzQ0Nn0.H6I0MOiiei-GrYscXnySR5_PiuHgjG1BtqME-oOM3Ns
+Content-Type: multipart/form-data; boundary=WebAppBoundary
+
+--WebAppBoundary
+Content-Disposition: form-data; name="title"
+
+My Cool Avatar
+--WebAppBoundary
+Content-Disposition: form-data; name="file"; filename="test_image.png"
+Content-Type: image/png
+
+< ./test_image.png
+--WebAppBoundary--
+
+### Получить все публичные медиафайлы
+GET http://localhost:5000/media?page=1&limit=5&sortBy=createdAt&sortOrder=desc
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4YzY4YjVjZS0wZDFkLTQ1YzUtYTdlMS0wZDM4ZGQ0YTA5NjEiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODA0Nzk0NzYsImV4cCI6MTc4MDU2NTg3Nn0.F8TyhEY8XG9V3xkz5YK7i19Ie9vkniRUXEkFGoODgmg
+
+### Получить только МОИ картинки
+GET http://localhost:5000/media/my?type=IMAGE
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4YzY4YjVjZS0wZDFkLTQ1YzUtYTdlMS0wZDM4ZGQ0YTA5NjEiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODA0Nzc1NTcsImV4cCI6MTc4MDU2Mzk1N30.k67SXURb2OYNxMMGvonfZVPrKftFA4U3hSw3SDIWfPA
+
+### Обновление файла
+PATCH http://localhost:5000/media/8103c082-c44e-4e6e-9501-e0c36745332a
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4YzY4YjVjZS0wZDFkLTQ1YzUtYTdlMS0wZDM4ZGQ0YTA5NjEiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODA2NTEwNDYsImV4cCI6MTc4MDczNzQ0Nn0.H6I0MOiiei-GrYscXnySR5_PiuHgjG1BtqME-oOM3Ns
+Content-Type: application/json
+
+{
+  "title": "Моя обновленнаякартинка",
+  "description": "Теперь у этого файла есть крутое описание",
+  "status": "ACTIVE"
+}
+
+### Удаление файла
+DELETE http://localhost:5000/media/b721faa5-96e7-4519-9181-ea62e95ae4da
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4YzY4YjVjZS0wZDFkLTQ1YzUtYTdlMS0wZDM4ZGQ0YTA5NjEiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODA0Nzk0NzYsImV4cCI6MTc4MDU2NTg3Nn0.F8TyhEY8XG9V3xkz5YK7i19Ie9vkniRUXEkFGoODgmg
+
+### Поиск медиафайлов
+GET http://localhost:5000/media/search?q=Моя
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI4YzY4YjVjZS0wZDFkLTQ1YzUtYTdlMS0wZDM4ZGQ0YTA5NjEiLCJyb2xlIjoiQURNSU4iLCJpYXQiOjE3ODA2NTEwNDYsImV4cCI6MTc4MDczNzQ0Nn0.H6I0MOiiei-GrYscXnySR5_PiuHgjG1BtqME-oOM3Ns

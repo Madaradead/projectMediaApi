@@ -1,0 +1,153 @@
+import { type Request, type Response } from "express";
+import bcrypt from 'bcrypt';
+import { z } from "zod";
+import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import jwt from 'jsonwebtoken';
+import {type AuthRequest} from "../../middlewares/auth.middleware.js";
+
+const connectionString = process.env.DATABASE_URL!;
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
+
+
+//РЕГИСТРАЦИя
+
+const RegisterSchema = z.object({
+    email: z.string().email('invalid format email'),
+    username: z.string().min(3, 'must have at least 3 characters'),
+    password: z.string().min(6, 'must have at least 6 characters'),
+});
+
+export const register = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const validateData = RegisterSchema.parse(req.body);
+
+        const existingUser = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: validateData.email },
+                    { username: validateData.username }
+                ]
+            }
+        });
+        if (existingUser) {
+            res.status(400).json({ error: 'User already exist' });
+            return;
+        }
+
+        const saltRandom = 10;
+        const passwordHash = await bcrypt.hash(validateData.password, saltRandom);
+
+        const newUser = await prisma.user.create({
+            data: {
+                email: validateData.email,
+                username: validateData.username,
+                passwordHash: passwordHash
+            }
+        });
+
+        res.status(201).json({
+            message: "User successfully registered",
+            user: {
+                id: newUser.id,
+                email: newUser.email,
+                username: newUser.username
+            }
+        });
+
+    } catch (err) {
+        if (err instanceof z.ZodError) {
+            res.status(400).json({ error: err.message });
+            return;
+        }
+        console.error("Registration Error ", err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+
+
+// ЛОГИН
+
+const LoginSchema = z.object({
+    email: z.string().email('invalid format email'),
+    password: z.string().min(1, 'password is required'),
+});
+
+export const login = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const validateData = LoginSchema.parse(req.body);
+
+        const user = await prisma.user.findFirst({
+            where: {email: validateData.email}
+        });
+
+        if (!user) {
+            res.status(401).json({error: 'Invalid email or password'});
+            return;
+        }
+
+        const isPasswordValid = await bcrypt.compare(validateData.password, user.passwordHash);
+
+        if (!isPasswordValid) {
+            res.status(401).json({error: 'Invalid email or password'});
+            return;
+        }
+
+        const secret = process.env.JWT_SECRET!;
+        const token = jwt.sign(
+            {userId: user.id, role: user.role},
+            secret,
+            {expiresIn: '24h'}
+        );
+
+        res.status(200).json({
+            message: "Login successful",
+            token: token,
+            user: {
+                id: user.id,
+                email: user.email,
+                username: user.username
+            }
+        });
+
+
+
+
+
+    } catch (err) {
+        if (err instanceof z.ZodError) {
+            res.status(400).json({ error: err.message});
+            return;
+        }
+        console.error("Login Error ", err);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+};
+export const getMe = async (req:AuthRequest, res:Response): Promise<void> => {
+    try {
+        const userId = req.user.userId;
+
+        const user = await prisma.user.findFirst({
+            where: {
+                id: userId
+            }
+        });
+        if (!user) {
+            res.status(401).json({message: 'Invalid user'});
+            return;
+        }
+        res.status(200).json({
+            id: user.id,
+            email: user.email,
+            username: user.username,
+            role: user.role
+
+        });
+    } catch (err) {
+        console.error("getMe Error", err);
+        res.status(500).json({error: 'Internal Server Error'});
+    }
+};
