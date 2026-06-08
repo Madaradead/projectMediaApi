@@ -13,10 +13,9 @@ const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 
-//РЕГИСТРАЦИя
 
 const RegisterSchema = z.object({
-    email: z.string().email('invalid format email'),
+    email: z.email('invalid format email'),
     username: z.string().min(3, 'must have at least 3 characters'),
     password: z.string().min(6, 'must have at least 6 characters'),
 });
@@ -72,7 +71,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 // ЛОГИН
 
 const LoginSchema = z.object({
-    email: z.string().email('invalid format email'),
+    email: z.email('invalid format email'),
     password: z.string().min(1, 'password is required'),
 });
 

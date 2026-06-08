@@ -3,5 +3,15 @@ import app from "./app.js";
 
 const port = process.env.PORT || 5000;
 
-app.listen(port);
-console.log(`Server started on port ${port}`);
+const server = app.listen(port, () => {
+    console.log(`Listening on port ${port}`);
+});
+
+server.on("error", (err: any ) => {
+    if (err.code === "EADDRINUSE") {
+        console.error(`Port ${port} is already in use`);
+    }else{
+        console.error('Failed to start server', err);
+    }
+    process.exit(1);
+})

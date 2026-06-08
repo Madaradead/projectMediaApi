@@ -83,5 +83,5 @@ const swaggerSpec = swaggerJSDoc(options);
 export const setupSwagger = (app: Express): void => {
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
     const port = process.env.PORT || 5000;
-    console.log('Swagger documents: http://localhost:5000/api-docs');
+    console.log(`Swagger documents: http://localhost:${port}/api-docs`);
 };

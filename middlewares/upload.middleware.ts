@@ -23,16 +23,19 @@ const storage = multer.diskStorage({
     }
 });
 
-const fileFilter = (req:any , file:Express.Multer.File, cb:multer.FileFilterCallback) => {
-    const allowedMimeTypes = [
-        "image/png", "image/jpeg", "image/gif",
-        'video/mp4',
-        'audio/mpeg',
-        'audio/wav',
-        'application/pdf', 'text/plain',
-    ];
+export const ALLOWED_MIME_TYPES = [
+    "image/png",
+    "image/jpeg",
+    "image/gif",
+    "video/mp4",
+    "audio/mpeg",
+    "audio/wav",
+    "application/pdf",
+    "text/plain"
+];
 
-    if (allowedMimeTypes.includes(file.mimetype)) {
+const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
         cb(null, true);
     } else {
         cb(new Error("Unsupported file type") as any, false);
@@ -43,7 +46,7 @@ const upload = multer({
     storage,
     fileFilter,
     limits: {
-        fileSize: 10 * 1024 * 1024 // 10 MB
+        fileSize: 10 * 1024 * 1024
     }
 });
 
@@ -52,12 +55,10 @@ export const uploadMiddleware = (req: Request, res: Response, next: NextFunction
 
     singleUpload(req, res, (err: any) => {
         if (err instanceof multer.MulterError) {
-            // Ловим ошибку размера файла (строка 45)
             if (err.code === 'LIMIT_FILE_SIZE') {
                 res.status(413).json({ errors: 'Payload Too Large: File size exceeds the 10MB limit.' });
                 return;
             }
-            // Ловим остальные системные ошибки multer
             res.status(400).json({ errors: `Upload Error: ${err.message}` });
             return;
         } else if (err) {

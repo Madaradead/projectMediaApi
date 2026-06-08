@@ -18,7 +18,7 @@ router.use(authMiddleware);
 
 router.get('/:id/stream', streamFile);
 
-router.post('/upload', authMiddleware, uploadMiddleware, uploadMedia);
+router.post('/upload', uploadMiddleware, uploadMedia);
 
 
 router.get('/', getAllMedia);

@@ -4,6 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    "dev": "npx tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "seed": "npx prisma db seed",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -38,6 +42,6 @@
     "typescript": "^6.0.3"
   },
   "prisma": {
-    "seed": "tsx prisma/seed.st"
+    "seed": "npx tsx prisma/seed.ts"
   }
 }

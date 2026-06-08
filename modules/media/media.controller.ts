@@ -6,11 +6,14 @@ import {PrismaPg} from "@prisma/adapter-pg" ;
 import path from 'path'
 import fs from 'fs'
 import {fileTypeFromFile} from "file-type";
+import { z } from "zod";
+import {ALLOWED_MIME_TYPES} from "../../middlewares/upload.middleware.js";
 
 const connectionString = process.env.DATABASE_URL!;
 const pool = new Pool({connectionString});
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({adapter});
+
 
 const getMediaType = (mimeType: string): 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT'  => {
   if (mimeType.startsWith('image/')) return 'IMAGE';
@@ -27,21 +30,28 @@ try {
     }
     const meta = await fileTypeFromFile(req.file.path)
 
-    const allowedMimes = ['image/png', 'image/jpg', 'image/jpeg', 'image/mp4'];
+    let detectedMime: string;
 
-    if (!meta || !allowedMimes.includes(meta.mime)){
+    if (!meta) {
+        if (req.file.mimetype === 'text/plain') {
+            detectedMime = 'text/plain';
+        } else {
+            fs.unlinkSync(req.file.path);
+            res.status(400).json({errors: 'Alert: Invalid file type.'});
+            return;
+        }
+    }else{
+        detectedMime = meta.mime;
+    }
+    if(!ALLOWED_MIME_TYPES.includes(detectedMime)){
         fs.unlinkSync(req.file.path);
-        res.status(400).json({ errors: 'Alert: Invalid file type.' });
+        res.status(400).json({errors: 'Alert: Invalid file type.'});
         return;
     }
 
-
-
-
-
     const userId = req.user.userId;
 
-    const mediaType = getMediaType(meta.mime);
+    const mediaType = getMediaType(detectedMime);
 
     const mediaFile = await prisma.mediaFile.create({
         data:{
@@ -49,7 +59,7 @@ try {
             description: req.body.description || null,
             filename: req.file.filename,
             originalName: req.file.originalname,
-            mimeType: meta.mime,
+            mimeType: detectedMime,
             size: req.file.size,
             type: mediaType,
             ownerId: userId
@@ -66,18 +76,22 @@ try {
 }
 };
 
-const getPaginationAndSorting = (query: Record<string, unknown>) => {
-    const page = Math.max(1, parseInt(query.page as string) || 1);
-    const limit = Math.max(1, Math.min(100, parseInt(query.limit as string) || 10));
-    const skip = (page - 1) * limit;
+const querySchema = z.object({
+        page: z.coerce.number().int().min(1).default(1),
+        limit: z.coerce.number().int().min(1).max(100).default(10),
+    sortBy: z.enum(['createdAt', 'size', 'title']).default('createdAt'),
+    sortOrder: z.enum(['asc', 'desc']).default('desc'),
+    type: z.enum(['IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT']).optional(),
+    visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
+    status: z.enum(['ACTIVE', 'DELETED']).optional()
+});
+const updateMetadataSchema = z.object({
+    title: z.string().min(1).max(255).optional(),
+    description: z.string().max(1000).nullable().optional(),
+    visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
+});
 
-    const allowedSortFields = ['createdAT', 'size', 'title'];
 
-    const sortBy = allowedSortFields.includes(query.sortBy as string) ? query.sortBy : 'createdAT';
-    const sortOrder = query.sortOrder === 'asc' ? 'asc' : 'desc';
-
-    return {skip, take: limit, orderBy: {[sortBy as string]: sortOrder}, page, limit};
-};
 
 
 
@@ -87,85 +101,82 @@ const getPaginationAndSorting = (query: Record<string, unknown>) => {
 
 export const getAllMedia = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const {skip, take, orderBy, page, limit} = getPaginationAndSorting(req.query);
+        const parsedQuery = querySchema.safeParse(req.query);
+        if (!parsedQuery.success) {
+            res.status(400).json({
+                errors: 'Invalid query parameters',
+                details: z.treeifyError(parsedQuery.error)
+            });
+            return;
+        }
+        const { page, limit, sortBy, sortOrder, type } = parsedQuery.data;
 
+        const skip = (page - 1) * limit;
         const where: any = {
             visibility: 'PUBLIC',
             status: 'ACTIVE'
-
         };
-        if (req.query.type) {
-            const validTypes = ['IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT'];
-            if (!validTypes.includes(req.query.type as string)) {
-                res.status(400).json({errors: 'Invalid "type" parameter. Allowed values: IMAGE, VIDEO, AUDIO, DOCUMENT.'});
-                return;
-            }
-            where.type = req.query.type
+        if (type) {
+            where.type = type;
         }
 
         const [files, total] = await Promise.all([
-            prisma.mediaFile.findMany({where, skip, take, orderBy}),
-            prisma.mediaFile.count({where}),
+            prisma.mediaFile.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { [sortBy]: sortOrder }
+            }),
+            prisma.mediaFile.count({ where }),
         ]);
+
         res.status(200).json({
             data: files,
-            meta: {total, page, limit, totalPage: Math.ceil(total / limit)}
+            meta: { total, page, limit, totalPage: Math.ceil(total / limit) }
         });
     } catch (err) {
         console.error('GetAllMedia Error:', err);
-        res.status(500).json({errors: 'Internal server error while fetching media files'});
+        res.status(500).json({ errors: 'Internal server error while fetching media files' });
     }
-
 };
 
 export const getMyMedia = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const {skip, take, orderBy, page, limit} = getPaginationAndSorting(req.query);
+        const parsedQuery = querySchema.safeParse(req.query);
+
+        if (!parsedQuery.success) {
+            res.status(400).json({ errors: 'Invalid query parameters',
+                details: z.treeifyError(parsedQuery.error)
+            });
+            return;
+        }
+
+        const { page, limit, sortBy, sortOrder, type, visibility, status } = parsedQuery.data;
+        const skip = (page - 1) * limit;
         const userId = req.user.userId;
 
-        const where: any = {ownerId: userId};
-
-        if (req.query.type) {
-            const validTypes = ['IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT'];
-            if (!validTypes.includes(req.query.type as string)) {
-                res.status(400).json({ errors: 'Invalid "type" parameter.' });
-                return;
-            }
-            where.type = req.query.type;
-        }
-
-
-        if (req.query.visibility) {
-            const validVisibilities = ['PUBLIC', 'PRIVATE'];
-            if (!validVisibilities.includes(req.query.visibility as string)) {
-                res.status(400).json({ errors: 'Invalid "visibility" parameter.' });
-                return;
-            }
-            where.visibility = req.query.visibility;
-        }
-
-
-        if (req.query.status) {
-            const validStatuses = ['ACTIVE', 'DELETED'];
-            if (!validStatuses.includes(req.query.status as string)) {
-                res.status(400).json({ errors: 'Invalid "status" parameter.' });
-                return;
-            }
-            where.status = req.query.status;
-        }
+        const where: any = { ownerId: userId };
+        if (type) where.type = type;
+        if (visibility) where.visibility = visibility;
+        if (status) where.status = status;
 
         const [files, total] = await Promise.all([
-            prisma.mediaFile.findMany({where, skip, take, orderBy}),
-            prisma.mediaFile.count({where})
+            prisma.mediaFile.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { [sortBy]: sortOrder }
+            }),
+            prisma.mediaFile.count({ where })
         ]);
+
         res.status(200).json({
             data: files,
-            meta: {total, page, limit, totalPage: Math.ceil(total / limit)}
-
+            meta: { total, page, limit, totalPage: Math.ceil(total / limit) }
         });
-    }catch(err){
+    } catch(err) {
         console.error('GetMyMedia Error:', err);
-        res.status(500).json({errors: 'Internal server error while fetching user media'});
+        res.status(500).json({ errors: 'Internal server error while fetching user media' });
     }
 };
 
@@ -222,7 +233,15 @@ export const updateMetadata = async (req: AuthRequest, res: Response): Promise<v
     try{
         const id = req.params.id as string;
         const userId = req.user.userId;
-        const {title, description, visibility} = req.body;
+
+        const parsedBody = updateMetadataSchema.safeParse(req.body);
+        if(!parsedBody.success) {
+            res.status(400).json({
+                errors: 'Invalid request body',
+                details: z.treeifyError(parsedBody.error)
+            });
+            return;
+        }
 
 
         const mediaFile = await prisma.mediaFile.findUnique({
@@ -233,19 +252,15 @@ export const updateMetadata = async (req: AuthRequest, res: Response): Promise<v
             return;
         }
         if (mediaFile.ownerId !== userId && req.user.role  !== 'ADMIN') {
-            res.status(404).json({errors: 'You dont have permission to update this file'});
+            res.status(403).json({errors: 'You dont have permission to update this file'});
             return;
         }
 
 
         const updatedFile = await prisma.mediaFile.update({
             where: {id},
-            data: {
-                title :title !== undefined ? title : mediaFile.title,
-                description : description !== undefined ? description : mediaFile.description,
-                visibility : visibility !== undefined ? visibility : mediaFile.visibility,
+            data: parsedBody.data  as any
 
-            }
         });
         res.status(200).json({
             message: 'Updated metadata successfully',
@@ -256,6 +271,18 @@ export const updateMetadata = async (req: AuthRequest, res: Response): Promise<v
         res.status(500).json({errors: 'Internal server error while updating metadata'});
     }
 
+};
+
+const deleteFileWithRetry = async (filePath: string, retries = 3, delayMs = 1000) => {
+    for(let i =0; i < retries; i++) {
+        try{
+            await fs.promises.unlink(filePath);
+            return
+        }catch(err: any){
+            if (i === retries - 1) throw err;
+            await new Promise(res => setTimeout(res, delayMs));
+    }
+    }
 };
 
 export const deleteMedia = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -285,9 +312,9 @@ export const deleteMedia = async (req: AuthRequest, res: Response): Promise<void
 
         const filePath = path.join(process.cwd(), 'uploads', mediaFile.filename);
         try {
-            await fs.promises.unlink(filePath);
+            await deleteFileWithRetry(filePath, 3, 1000);
         } catch (fsErr) {
-            console.warn(`Warning: Could not delete physical file ${filePath}`, fsErr);
+            console.warn(`[ORPHAN FILE] Failed to delete file after retries: ${filePath}`, fsErr);
         }
 
         res.status(200).json({message: 'Deleted successfully'});
@@ -299,25 +326,38 @@ export const deleteMedia = async (req: AuthRequest, res: Response): Promise<void
 
 export const searchMedia = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const { skip, take, orderBy, page, limit } = getPaginationAndSorting(req.query as Record<string, unknown>);
+        const q = req.query.q;
+        if (!q || typeof q !== 'string' || q.trim() === '') {
+            res.status(400).json({errors: 'Search query parameter is required and cannot be empty '});
+            return;
+        }
 
-        const searchQuery = req.query.q as string;
+        const searchQuery = q.trim();
+
+        const parsedQuery = querySchema.safeParse(req.query);
+        if (!parsedQuery.success) {
+            res.status(400).json({ errors: 'Invalid pagination parameters' });
+            return;
+        }
+
+        const { page, limit, sortBy, sortOrder } = parsedQuery.data;
+        const skip = (page - 1) * limit;
 
         const where: any = {
             status: 'ACTIVE',
-            visibility: 'PUBLIC'
+            visibility: 'PUBLIC',
+            OR:[
+                { title: { contains: searchQuery, mode: 'insensitive' }},
+                {description: { contains: searchQuery, mode: 'insensitive' }}
+    ]
         };
-
-        if (searchQuery) {
-            where.title = { contains: searchQuery, mode: 'insensitive' };
-        }
 
         const [files, total] = await Promise.all([
             prisma.mediaFile.findMany({
                 where,
                 skip,
-                take,
-                orderBy
+                take: limit,
+                orderBy: { [sortBy]: sortOrder }
             }),
             prisma.mediaFile.count({ where })
         ]);

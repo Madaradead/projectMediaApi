@@ -13,11 +13,11 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
     console.log('Starting database seeding...');
 
-    const adminEmail = process.env.ADMIN_EMAIL || 'madaradead22@gmail.com';
-    const adminPass = process.env.ADMIN_PASSWORD || 'madaradead22_123';
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@gmail.com';
+    const adminPass = process.env.ADMIN_PASSWORD || 'DefaultAdminPassword123!';
 
-    const userEmail = process.env.USER_EMAIL || 'pro100nekit1184@gmail.com';
-    const userPass = process.env.USER_PASSWORD || 'user_password_234';
+    const userEmail = process.env.USER_EMAIL || 'user@gmail.com';
+    const userPass = process.env.USER_PASSWORD || 'DefaultUserPassword123!';
 
     console.log('Hashing passwords...');
     const adminHash = await bcrypt.hash(adminPass, 10);
@@ -30,7 +30,7 @@ async function main() {
         },
         create: {
             email: adminEmail,
-            username: 'madara',
+            username: 'admin123',
             passwordHash: adminHash,
             role: "ADMIN"
         }
@@ -44,7 +44,7 @@ async function main() {
         },
         create: {
             email: userEmail,
-            username: 'nikita',
+            username: 'user123',
             passwordHash: userHash,
             role: "USER"
         }

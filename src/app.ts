@@ -14,7 +14,7 @@ app.get('/health', (req, res) => {
 });
 
 setupSwagger(app);
-app.use(express.json());
+app.use(express.json({limit: "5mb"}));
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use("/media", mediaRoutes);
