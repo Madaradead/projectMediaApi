@@ -13,13 +13,12 @@ import {apiLimiter} from "../../middlewares/rateLimit.middleware.js";
 
 const router = Router();
 
-router.get('/:id/stream', streamFile);
-
-
 
 router.use(authMiddleware);
 
-router.post('/upload', apiLimiter, uploadMiddleware.single('file'), uploadMedia);
+router.get('/:id/stream', streamFile);
+
+router.post('/upload', authMiddleware, uploadMiddleware, uploadMedia);
 
 
 router.get('/', getAllMedia);

@@ -26,6 +26,7 @@ const options: swaggerJSDoc.Options = {
                 post: {
                     summary: 'Register a new user',
                     tags: ['Auth'],
+                    security: [],
                     requestBody: {
                         required: true,
                         content: { 'application/json': { schema: { type: 'object', properties: { username: { type: 'string' }, email: { type: 'string' }, password: { type: 'string' } } } } }
@@ -37,6 +38,7 @@ const options: swaggerJSDoc.Options = {
                 post: {
                     summary: 'User login',
                     tags: ['Auth'],
+                    security: [],
                     requestBody: {
                         required: true,
                         content: { 'application/json': { schema: { type: 'object', properties: { email: { type: 'string' }, password: { type: 'string' } } } } }
@@ -80,5 +82,6 @@ const swaggerSpec = swaggerJSDoc(options);
 
 export const setupSwagger = (app: Express): void => {
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-    console.log('📄 Swagger documents: http://localhost:5000/api-docs');
+    const port = process.env.PORT || 5000;
+    console.log('Swagger documents: http://localhost:5000/api-docs');
 };

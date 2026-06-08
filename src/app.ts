@@ -1,4 +1,4 @@
-import express, { type Request, type Response } from "express";
+import express from "express";
 import authRoutes from "../modules/auth/auth.routes.js";
 import adminRoutes from "../modules/admin/admin.routes.js";
 import mediaRoutes from "../modules/media/media.routes.js";

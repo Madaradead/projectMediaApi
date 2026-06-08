@@ -10,6 +10,7 @@ export const roleMiddleware = (allowedRoles: string[]) => {
             }
             if(!allowedRoles.includes(req.user.role)) {
                 res.status(403).json({ message: "Access denied.Insufficient privileges" });
+                return;
             }
 
             next()
