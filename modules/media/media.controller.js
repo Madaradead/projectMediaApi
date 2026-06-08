@@ -1,0 +1,375 @@
+import {} from "express";
+import {} from "../../middlewares/auth.middleware.js";
+import { prisma } from "../../lib/prisma.js";
+import path from 'path';
+import fs from 'fs';
+import { fileTypeFromFile } from "file-type";
+import { z } from "zod";
+import { ALLOWED_MIME_TYPES } from "../../middlewares/upload.middleware.js";
+import { Prisma } from "@prisma/client";
+const getMediaType = (mimeType) => {
+    if (mimeType.startsWith('image/'))
+        return 'IMAGE';
+    if (mimeType.startsWith('video/'))
+        return 'VIDEO';
+    if (mimeType.startsWith('audio/'))
+        return 'AUDIO';
+    return 'DOCUMENT';
+};
+const isValidTextContent = (content) => {
+    if (content.includes('\0'))
+        return false;
+    const lines = content.split(/\r?\n/);
+    for (const line of lines) {
+        if (line.length > 8192)
+            return false;
+    }
+    const totalChars = content.length;
+    if (totalChars === 0)
+        return true;
+    let controlCharsCount = 0;
+    for (let i = 0; i < totalChars; i++) {
+        const code = content.charCodeAt(i);
+        if ((code < 32 && code !== 9 && code !== 10 && code !== 13) || code === 127) {
+            controlCharsCount++;
+        }
+    }
+    const controlRatio = controlCharsCount / totalChars;
+    if (controlRatio > 0.02)
+        return false;
+    return true;
+};
+export const uploadMedia = async (req, res) => {
+    try {
+        if (!req.file) {
+            res.status(400).json({ errors: 'The file was not uploaded or is in an invalid format.' });
+            return;
+        }
+        const meta = await fileTypeFromFile(req.file.path);
+        let detectedMime;
+        if (!meta) {
+            if (req.file.mimetype === 'text/plain') {
+                const content = await fs.promises.readFile(req.file.path, 'utf-8');
+                if (!isValidTextContent(content)) {
+                    await fs.promises.unlink(req.file.path);
+                    res.status(400).json({ errors: 'Alert: Invalid file type (binary masquerading as text).' });
+                    return;
+                }
+                detectedMime = 'text/plain';
+            }
+            else {
+                await fs.promises.unlink(req.file.path);
+                res.status(400).json({ errors: 'Alert: Invalid file type.' });
+                return;
+            }
+        }
+        else {
+            detectedMime = meta.mime;
+        }
+        if (!ALLOWED_MIME_TYPES.includes(detectedMime)) {
+            await fs.promises.unlink(req.file.path);
+            res.status(400).json({ errors: 'Alert: Invalid file type.' });
+            return;
+        }
+        const userId = req.user.userId;
+        const mediaType = getMediaType(detectedMime);
+        const mediaFile = await prisma.mediaFile.create({
+            data: {
+                title: req.body.title || req.file.originalname,
+                description: req.body.description || null,
+                filename: req.file.filename,
+                originalName: req.file.originalname,
+                mimeType: detectedMime,
+                size: req.file.size,
+                type: mediaType,
+                ownerId: userId
+            }
+        });
+        res.status(201).json({
+            message: 'Successfully uploaded media',
+            file: mediaFile,
+        });
+    }
+    catch (err) {
+        console.error('Error while uploading media', err);
+        if (req.file) {
+            await fs.promises.unlink(req.file.path).catch(() => { });
+        }
+        res.status(500).json({ errors: 'Internal server error while uploading file' });
+    }
+};
+const querySchema = z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(10),
+    sortBy: z.enum(['createdAt', 'size', 'title']).default('createdAt'),
+    sortOrder: z.enum(['asc', 'desc']).default('desc'),
+    type: z.enum(['IMAGE', 'VIDEO', 'AUDIO', 'DOCUMENT']).optional(),
+    visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
+    status: z.enum(['ACTIVE', 'DELETED']).optional()
+});
+const updateMetadataSchema = z.object({
+    title: z.string().min(1).max(255).optional(),
+    description: z.string().max(1000).nullable().optional(),
+    visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
+});
+export const getAllMedia = async (req, res) => {
+    try {
+        const parsedQuery = querySchema.safeParse(req.query);
+        if (!parsedQuery.success) {
+            res.status(400).json({
+                errors: 'Invalid query parameters',
+                details: z.treeifyError(parsedQuery.error)
+            });
+            return;
+        }
+        const { page, limit, sortBy, sortOrder, type } = parsedQuery.data;
+        const skip = (page - 1) * limit;
+        const where = {
+            visibility: 'PUBLIC',
+            status: 'ACTIVE'
+        };
+        if (type) {
+            where.type = type;
+        }
+        const [files, total] = await Promise.all([
+            prisma.mediaFile.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { [sortBy]: sortOrder }
+            }),
+            prisma.mediaFile.count({ where }),
+        ]);
+        res.status(200).json({
+            data: files,
+            meta: { total, page, limit, totalPage: Math.ceil(total / limit) }
+        });
+    }
+    catch (err) {
+        console.error('GetAllMedia Error:', err);
+        res.status(500).json({ errors: 'Internal server error while fetching media files' });
+    }
+};
+export const getMyMedia = async (req, res) => {
+    try {
+        const parsedQuery = querySchema.safeParse(req.query);
+        if (!parsedQuery.success) {
+            res.status(400).json({
+                errors: 'Invalid query parameters',
+                details: z.treeifyError(parsedQuery.error)
+            });
+            return;
+        }
+        const { page, limit, sortBy, sortOrder, type, visibility, status } = parsedQuery.data;
+        const skip = (page - 1) * limit;
+        const userId = req.user.userId;
+        const where = { ownerId: userId };
+        if (type)
+            where.type = type;
+        if (visibility)
+            where.visibility = visibility;
+        if (status)
+            where.status = status;
+        const [files, total] = await Promise.all([
+            prisma.mediaFile.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { [sortBy]: sortOrder }
+            }),
+            prisma.mediaFile.count({ where })
+        ]);
+        res.status(200).json({
+            data: files,
+            meta: { total, page, limit, totalPage: Math.ceil(total / limit) }
+        });
+    }
+    catch (err) {
+        console.error('GetMyMedia Error:', err);
+        res.status(500).json({ errors: 'Internal server error while fetching user media' });
+    }
+};
+export const streamFile = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const mediaFile = await prisma.mediaFile.findUnique({
+            where: { id }
+        });
+        if (!mediaFile) {
+            res.status(404).json({ errors: 'No media file found' });
+            return;
+        }
+        if (mediaFile.status === 'DELETED') {
+            res.status(404).json({ error: ' File has been deleted' });
+            return;
+        }
+        if (mediaFile.visibility === 'PRIVATE') {
+            if (!req.user) {
+                res.status(401).json({ errors: 'Authorization is required to view a private file.' });
+                return;
+            }
+            const userId = req.user.userId;
+            if (mediaFile.ownerId !== userId && req.user.role !== 'ADMIN') {
+                res.status(403).json({ errors: 'Access denied.Private file.' });
+                return;
+            }
+        }
+        const filePath = path.join(process.cwd(), 'uploads', mediaFile.filename);
+        try {
+            await fs.promises.access(filePath);
+        }
+        catch (err) {
+            res.status(404).json({ errors: 'No file found with the file name' });
+            return;
+        }
+        res.sendFile(filePath);
+    }
+    catch (err) {
+        console.error('Stream Error:', err);
+        res.status(500).json({ errors: 'Internal server error while streaming file' });
+    }
+};
+export const updateMetadata = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const userId = req.user.userId;
+        const parsedBody = updateMetadataSchema.safeParse(req.body);
+        if (!parsedBody.success) {
+            res.status(400).json({
+                errors: 'Invalid request body',
+                details: z.treeifyError(parsedBody.error)
+            });
+            return;
+        }
+        const mediaFile = await prisma.mediaFile.findUnique({
+            where: { id }
+        });
+        if (!mediaFile) {
+            res.status(404).json({ errors: 'No media file found' });
+            return;
+        }
+        if (mediaFile.ownerId !== userId && req.user.role !== 'ADMIN') {
+            res.status(403).json({ errors: 'You dont have permission to update this file' });
+            return;
+        }
+        const updateData = {};
+        if (parsedBody.data.title !== undefined)
+            updateData.title = parsedBody.data.title;
+        if (parsedBody.data.description !== undefined)
+            updateData.description = parsedBody.data.description;
+        if (parsedBody.data.visibility !== undefined)
+            updateData.visibility = parsedBody.data.visibility;
+        const updatedFile = await prisma.mediaFile.update({
+            where: { id },
+            data: updateData
+        });
+        res.status(200).json({
+            message: 'Updated metadata successfully',
+            file: updatedFile
+        });
+    }
+    catch (err) {
+        console.error('Update error:', err);
+        res.status(500).json({ errors: 'Internal server error while updating metadata' });
+    }
+};
+const deleteFileWithRetry = async (filePath, retries = 3, delayMs = 1000) => {
+    for (let i = 0; i < retries; i++) {
+        try {
+            await fs.promises.unlink(filePath);
+            return;
+        }
+        catch (err) {
+            if (i === retries - 1)
+                throw err;
+            await new Promise(res => setTimeout(res, delayMs));
+        }
+    }
+};
+export const deleteMedia = async (req, res) => {
+    try {
+        const id = req.params.id;
+        const userId = req.user.userId;
+        const mediaFile = await prisma.mediaFile.findUnique({
+            where: { id }
+        });
+        if (!mediaFile) {
+            res.status(404).json({ errors: 'No media file found' });
+            return;
+        }
+        if (mediaFile.ownerId !== userId && req.user.role !== 'ADMIN') {
+            res.status(403).json({ errors: 'You do not have permission to delete this file' });
+            return;
+        }
+        if (mediaFile.status === 'DELETED') {
+            res.status(400).json({ errors: 'This file has already been deleted previously.' });
+            return;
+        }
+        const filePath = path.join(process.cwd(), 'uploads', mediaFile.filename);
+        try {
+            await deleteFileWithRetry(filePath, 3, 1000);
+        }
+        catch (fsErr) {
+            console.error(`Failed to delete ${filePath}`, fsErr);
+            res.status(500).json({ errors: 'Failed to clean up storage file. Database state unmodified.' });
+            return;
+        }
+        await prisma.mediaFile.update({
+            where: { id },
+            data: { status: 'DELETED' }
+        });
+        res.status(200).json({ message: 'Deleted successfully' });
+    }
+    catch (err) {
+        console.error('Delete error:', err);
+        res.status(500).json({ errors: 'Internal server error while deleting file' });
+    }
+};
+export const searchMedia = async (req, res) => {
+    try {
+        const q = req.query.q;
+        if (!q || typeof q !== 'string' || q.trim() === '') {
+            res.status(400).json({ errors: 'Search query parameter is required and cannot be empty ' });
+            return;
+        }
+        const searchQuery = q.trim();
+        const parsedQuery = querySchema.safeParse(req.query);
+        if (!parsedQuery.success) {
+            res.status(400).json({ errors: 'Invalid pagination parameters' });
+            return;
+        }
+        const { page, limit, sortBy, sortOrder } = parsedQuery.data;
+        const skip = (page - 1) * limit;
+        const where = {
+            status: 'ACTIVE',
+            visibility: 'PUBLIC',
+            OR: [
+                { title: { contains: searchQuery, mode: 'insensitive' } },
+                { description: { contains: searchQuery, mode: 'insensitive' } }
+            ]
+        };
+        const [files, total] = await Promise.all([
+            prisma.mediaFile.findMany({
+                where,
+                skip,
+                take: limit,
+                orderBy: { [sortBy]: sortOrder }
+            }),
+            prisma.mediaFile.count({ where })
+        ]);
+        res.status(200).json({
+            data: files,
+            meta: {
+                total,
+                page,
+                limit,
+                totalPage: Math.ceil(total / limit)
+            }
+        });
+    }
+    catch (err) {
+        console.error('SearchMedia Error:', err);
+        res.status(500).json({ errors: 'Internal server error while searching media' });
+    }
+};
+//# sourceMappingURL=media.controller.js.map

@@ -1,18 +1,10 @@
 import { type Request, type Response } from "express";
 import bcrypt from 'bcrypt';
 import { z } from "zod";
-import { PrismaClient } from '@prisma/client';
-import { Pool } from 'pg';
-import { PrismaPg } from '@prisma/adapter-pg';
+import {prisma} from "../../lib/prisma.js";
 import jwt from 'jsonwebtoken';
 import {type AuthRequest} from "../../middlewares/auth.middleware.js";
-
-const connectionString = process.env.DATABASE_URL!;
-const pool = new Pool({ connectionString });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter });
-
-
+import {Env} from "../../config/env.js";
 
 const RegisterSchema = z.object({
     email: z.email('invalid format email'),
@@ -57,10 +49,14 @@ export const register = async (req: Request, res: Response): Promise<void> => {
             }
         });
 
-    } catch (err) {
+    } catch (err: any) {
         if (err instanceof z.ZodError) {
             res.status(400).json({ error: err.message });
             return;
+        }
+        if(err.code === 'P2002'){
+            res.status(409).json({ error: 'Conflict: User with this email or username already exist' });
+return;
         }
         console.error("Registration Error ", err);
         res.status(500).json({ error: 'Internal Server Error' });
@@ -95,7 +91,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        const secret = process.env.JWT_SECRET!;
+        const secret = Env.JWT_SECRET!;
         const token = jwt.sign(
             {userId: user.id, role: user.role},
             secret,

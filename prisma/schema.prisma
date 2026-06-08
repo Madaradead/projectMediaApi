@@ -6,7 +6,7 @@ datasource db {
   provider = "postgresql"
 }
 
-enum MediaType{
+enum MediaType {
   IMAGE
   VIDEO
   AUDIO
@@ -18,54 +18,43 @@ enum Visibility {
   PRIVATE
 }
 
-enum MediaStatus{
+enum MediaStatus {
   ACTIVE
   PENDING
   DELETED
 }
 
-model MediaFile{
-  id String @id @default(uuid())
-  title String
-  description String?
-  filename String
+model MediaFile {
+  id           String      @id @default(uuid())
+  title        String
+  description  String?
+  filename     String
   originalName String
-  mimeType String
-  size Int
-  type MediaType
-  visibility Visibility @default(PUBLIC)
-  status MediaStatus @default(ACTIVE)
-  createdAT  DateTime @default(now())
-  updatedAT DateTime @updatedAt
+  mimeType     String
+  size         Int
+  type         MediaType
+  visibility   Visibility  @default(PUBLIC)
+  status       MediaStatus @default(ACTIVE)
 
-  ownerId      String
-  owner        User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
+  ownerId String
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 }
-
-
 
 enum Role {
   USER
   ADMIN
 }
 
-model User{
-  id String @id @default(uuid())
-
-  email String @unique
-
+model User {
+  id           String      @id @default(uuid())
+  email        String      @unique
   passwordHash String
-
-  username String @unique
-
-  role Role @default(USER)
-
-  createdAt DateTime @default(now())
-
-  updatedAt DateTime @updatedAt
-
-  mediaFiles MediaFile[]
-
+  username     String      @unique
+  role         Role        @default(USER)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  mediaFiles   MediaFile[]
 }
-
