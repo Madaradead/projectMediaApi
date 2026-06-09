@@ -1,12 +1,7 @@
 import {type Request,type  Response} from 'express';
-import {PrismaClient} from "@prisma/client";
-import {Pool} from "pg";
-import {PrismaPg} from "@prisma/adapter-pg";
+import {prisma} from "../../lib/prisma.js";
 
-const connectionString = process.env.DATABASE_URL;
-const pool = new Pool({connectionString});
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({adapter});
+
 
 
 export const getAllUsers = async (req: Request, res: Response): Promise<void> => {
