@@ -12,7 +12,7 @@ try{
             email: true,
             username: true,
             role: true,
-            createdAt: true,
+            creatnmedAt: true,
         }
     });
     res.status(200).json(users);

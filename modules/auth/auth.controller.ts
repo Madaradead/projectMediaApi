@@ -16,16 +16,21 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     try {
         const validateData = RegisterSchema.parse(req.body);
 
-        const existingUser = await prisma.user.findFirst({
-            where: {
-                OR: [
-                    { email: validateData.email },
-                    { username: validateData.username }
-                ]
-            }
+        const existingUserByEmail = await prisma.user.findUnique({
+            where: { email: validateData.email }
         });
-        if (existingUser) {
-            res.status(400).json({ error: 'User already exist' });
+
+        if (existingUserByEmail) {
+            res.status(400).json({ error: 'Email already exists' });
+            return;
+        }
+
+        const existingUserByUsername = await prisma.user.findUnique({
+            where: { username: validateData.username }
+        });
+
+        if (existingUserByUsername) {
+            res.status(400).json({ error: 'Username already taken' });
             return;
         }
 
@@ -54,10 +59,11 @@ export const register = async (req: Request, res: Response): Promise<void> => {
             res.status(400).json({ error: err.message });
             return;
         }
-        if(err.code === 'P2002'){
-            res.status(409).json({ error: 'Conflict: User with this email or username already exist' });
-return;
+        if (err.code === 'P2002') {
+            res.status(409).json({ error: 'Conflict: User with this email or username already exists' });
+            return;
         }
+
         console.error("Registration Error ", err);
         res.status(500).json({ error: 'Internal Server Error' });
     }

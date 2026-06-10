@@ -4,10 +4,10 @@ import adminRoutes from "../modules/admin/admin.routes.js";
 import mediaRoutes from "../modules/media/media.routes.js";
 import { errorHandler} from "../middlewares/error.middleware.js";
 import {setupSwagger} from "../utils/swagger.js";
-
+import cors from 'cors';
 
 const app = express();
-
+app.use(cors());
 
 app.get('/health', (req, res) => {
     res.status(200).json({status: 'OK'});
