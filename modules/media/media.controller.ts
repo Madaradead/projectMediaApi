@@ -145,7 +145,12 @@ export const getAllMedia = async (req: AuthRequest, res: Response): Promise<void
                 where,
                 skip,
                 take: limit,
-                orderBy: { [sortBy]: sortOrder }
+                orderBy: { [sortBy]: sortOrder },
+                include: {
+                    owner: {
+                        select: {username:true}
+                    }
+                }
             }),
             prisma.mediaFile.count({ where }),
         ]);
@@ -186,7 +191,12 @@ export const getMyMedia = async (req: AuthRequest, res: Response): Promise<void>
                 where,
                 skip,
                 take: limit,
-                orderBy: { [sortBy]: sortOrder }
+                orderBy: { [sortBy]: sortOrder },
+                include: {
+                    owner: {
+                        select: {username:true}
+                    }
+                }
             }),
             prisma.mediaFile.count({ where })
         ]);
@@ -277,7 +287,13 @@ export const updateMetadata = async (req: AuthRequest, res: Response): Promise<v
 
         const updatedFile = await prisma.mediaFile.update({
             where: { id },
-            data: updateData
+            data: updateData,
+
+            include: {
+                owner: {
+                    select: {username:true}
+                }
+            }
 
         });
         res.status(200).json({
@@ -376,7 +392,12 @@ export const searchMedia = async (req: AuthRequest, res: Response): Promise<void
                 where,
                 skip,
                 take: limit,
-                orderBy: { [sortBy]: sortOrder }
+                orderBy: { [sortBy]: sortOrder },
+                include: {
+                    owner:{
+                        select: {username:true}
+                    }
+                }
             }),
             prisma.mediaFile.count({ where })
         ]);

@@ -14,7 +14,7 @@ import {apiLimiter} from "../../middlewares/rateLimit.middleware.js";
 const router = Router();
 
 router.get('/', getAllMedia);
-router.get('/my', getMyMedia);
+router.get('/my',authMiddleware, getMyMedia);
 router.get('/search', apiLimiter, searchMedia);
 router.get('/:id/stream', streamFile);
 router.use(authMiddleware);
@@ -25,7 +25,7 @@ router.post('/upload', uploadMiddleware, uploadMedia);
 
 
 
-router.patch('/:id', updateMetadata);
-router.delete('/:id', deleteMedia);
+router.patch('/:id', authMiddleware, updateMetadata);
+router.delete('/:id', authMiddleware ,deleteMedia);
 
 export default router;
